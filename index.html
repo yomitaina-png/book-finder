@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>まちの本屋さん — 今週の話題作</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;600;700&family=Noto+Sans+JP:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #faf6f0;
+    --warm-white: #fff9f2;
+    --brown-dark: #2c1a0e;
+    --brown-mid: #6b3f1f;
+    --brown-light: #c4956a;
+    --brown-pale: #e8d5be;
+    --accent: #c0392b;
+    --accent-light: #e74c3c;
+    --shelf: #8b5e3c;
+    --text: #2c1a0e;
+    --text-light: #7a5c42;
+    --shadow: rgba(44,26,14,0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--cream);
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* 木目テクスチャ背景 */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      repeating-linear-gradient(
+        92deg,
+        transparent,
+        transparent 40px,
+        rgba(139,94,60,0.03) 40px,
+        rgba(139,94,60,0.03) 41px
+      ),
+      repeating-linear-gradient(
+        180deg,
+        transparent,
+        transparent 80px,
+        rgba(139,94,60,0.02) 80px,
+        rgba(139,94,60,0.02) 81px
+      );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100vh;
+  }
+
+  /* ヘッダー */
+  header {
+    background: var(--brown-dark);
+    padding: 24px 20px 20px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 12px var(--shadow);
+  }
+
+  .header-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .logo {
+    font-family: 'Noto Serif JP', serif;
+    font-weight: 700;
+    font-size: 20px;
+    color: var(--cream);
+    line-height: 1.3;
+  }
+
+  .logo span {
+    display: block;
+    font-size: 11px;
+    font-family: 'Noto Sans JP', sans-serif;
+    font-weight: 300;
+    color: var(--brown-pale);
+    letter-spacing: 0.15em;
+    margin-top: 2px;
+  }
+
+  .date-badge {
+    background: var(--accent);
+    color: white;
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    margin-top: 4px;
+  }
+
+  /* 位置情報バー */
+  .location-bar {
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .location-bar:hover { background: rgba(255,255,255,0.15); }
+
+  .location-icon {
+    font-size: 14px;
+  }
+
+  .location-text {
+    font-size: 12px;
+    color: var(--brown-pale);
+    flex: 1;
+  }
+
+  .location-text strong {
+    color: var(--cream);
+    font-weight: 500;
+  }
+
+  /* タブ */
+  .tabs {
+    display: flex;
+    background: var(--brown-dark);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding: 0 20px 12px;
+    gap: 6px;
+  }
+
+  .tab {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--brown-pale);
+    border: 1px solid transparent;
+  }
+
+  .tab.active {
+    background: var(--brown-mid);
+    color: var(--cream);
+    border-color: var(--brown-light);
+  }
+
+  /* メインコンテンツ */
+  main {
+    padding: 16px 16px 80px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 0 4px;
+  }
+
+  .section-header h2 {
+    font-family: 'Noto Serif JP', serif;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--brown-dark);
+  }
+
+  .rank-label {
+    font-size: 11px;
+    color: var(--text-light);
+    margin-left: auto;
+  }
+
+  /* ローディング */
+  .loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 60px 20px;
+    gap: 16px;
+    color: var(--text-light);
+  }
+
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--brown-pale);
+    border-top-color: var(--brown-mid);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading p { font-size: 13px; }
+
+  /* 本カード */
+  .book-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .book-card {
+    background: var(--warm-white);
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    box-shadow: 0 2px 8px var(--shadow);
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid rgba(196,149,106,0.2);
+    animation: fadeUp 0.4s ease both;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .book-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--brown-pale);
+    transition: background 0.2s;
+  }
+
+  .book-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px var(--shadow);
+  }
+
+  .book-card:hover::before { background: var(--accent); }
+
+  .book-card.rank-1::before { background: #d4af37; }
+  .book-card.rank-2::before { background: #a8a8a8; }
+  .book-card.rank-3::before { background: #cd7f32; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .rank-badge {
+    font-family: 'Noto Serif JP', serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--brown-pale);
+    line-height: 1;
+    min-width: 28px;
+    text-align: center;
+    margin-top: 2px;
+  }
+
+  .rank-badge.gold { color: #d4af37; }
+  .rank-badge.silver { color: #a8a8a8; }
+  .rank-badge.bronze { color: #cd7f32; }
+
+  .book-cover {
+    width: 56px;
+    height: 78px;
+    border-radius: 4px;
+    object-fit: cover;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
+    flex-shrink: 0;
+    background: var(--brown-pale);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+  }
+
+  .book-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .book-title {
+    font-family: 'Noto Serif JP', serif;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--brown-dark);
+    margin-bottom: 4px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .book-author {
+    font-size: 12px;
+    color: var(--text-light);
+    margin-bottom: 6px;
+  }
+
+  .book-meta {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .publisher-tag {
+    font-size: 10px;
+    background: var(--brown-pale);
+    color: var(--brown-mid);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  .price-tag {
+    font-size: 11px;
+    color: var(--text-light);
+  }
+
+  .trend-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: auto;
+  }
+
+  .trend-up {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .trend-new {
+    background: #fff3e0;
+    color: #e65100;
+  }
+
+  .trend-down {
+    background: #fce4ec;
+    color: #c62828;
+  }
+
+  /* 在庫ボタン */
+  .stock-btn {
+    margin-top: 10px;
+    width: 100%;
+    padding: 9px 12px;
+    background: var(--brown-dark);
+    color: var(--cream);
+    border: none;
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: 'Noto Sans JP', sans-serif;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+
+  .stock-btn:hover { background: var(--brown-mid); }
+
+  .stock-btn.isbn-found {
+    background: var(--accent);
+  }
+
+  .stock-btn.isbn-found:hover { background: var(--accent-light); }
+
+  .stock-btn.isbn-loading {
+    background: var(--brown-light);
+    cursor: wait;
+  }
+
+  .stock-btn .btn-icon { font-size: 14px; }
+
+  /* ISBN状態 */
+  .isbn-status {
+    font-size: 10px;
+    color: var(--text-light);
+    margin-top: 4px;
+    text-align: right;
+  }
+
+  /* エラー表示 */
+  .error-box {
+    background: #fff5f5;
+    border: 1px solid #fbb;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    color: var(--accent);
+    font-size: 13px;
+  }
+
+  /* フッター */
+  .bottom-info {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 480px;
+    background: var(--brown-dark);
+    padding: 12px 20px;
+    text-align: center;
+    font-size: 10px;
+    color: var(--brown-pale);
+    line-height: 1.6;
+  }
+
+  .source-link {
+    color: var(--brown-light);
+    text-decoration: none;
+  }
+
+  /* 説明パネル */
+  .how-it-works {
+    background: rgba(196,149,106,0.1);
+    border: 1px solid rgba(196,149,106,0.3);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 16px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-light);
+  }
+
+  .how-it-works strong { color: var(--brown-mid); }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="header-top">
+      <div class="logo">
+        まちの本屋さん
+        <span>WEEKLY BESTSELLERS</span>
+      </div>
+      <div class="date-badge" id="dateLabel">読み込み中...</div>
+    </div>
+    <div class="location-bar" id="locationBar" onclick="getLocation()">
+      <span class="location-icon">📍</span>
+      <span class="location-text" id="locationText"><strong>位置情報を取得</strong>して近くの書店を探す</span>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('all', this)">総合</div>
+    <div class="tab" onclick="switchTab('bunko', this)">文庫</div>
+    <div class="tab" onclick="switchTab('comic', this)">コミック</div>
+  </div>
+
+  <main>
+    <div class="how-it-works">
+      📚 <strong>日販週間ベストセラー</strong>の上位作品を表示。<br>
+      「近くの書店で在庫確認」ボタンで<strong>書店在庫プロジェクト</strong>に接続し、近隣書店の在庫状況を確認できます。
+    </div>
+
+    <div class="section-header">
+      <h2>📊 今週のランキング</h2>
+      <span class="rank-label" id="rankLabel">TOP 20</span>
+    </div>
+
+    <div id="bookList" class="book-list">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>ベストセラー情報を取得中...</p>
+      </div>
+    </div>
+  </main>
+
+  <div class="bottom-info">
+    データ出典: <a class="source-link" href="https://www.nippan.co.jp/ranking/weekly/" target="_blank">日販週間ベストセラー</a> ／ 
+    在庫確認: <a class="source-link" href="https://demo.openbs.jp/" target="_blank">書店在庫プロジェクト</a>
+  </div>
+</div>
+
+<script>
+// =====================
+// 日販から取得済みのベストセラーデータ（2026年3月3日調べ）
+// =====================
+const BESTSELLERS = {
+  all: [
+    { rank: 1, prev: 3, title: 'プロ野球カラー名鑑　2026', author: '', publisher: 'ベースボール・マガジン社', price: '536円', trend: 'up' },
+    { rank: 2, prev: 6, title: 'デコピンのとくべつないちにち', author: '大谷翔平', publisher: 'ポプラ社', price: '1,800円', trend: 'up' },
+    { rank: 3, prev: 4, title: 'ハーバード、スタンフォード、オックスフォード… 科学的に証明された すごい習慣大百科', author: '堀田秀吾', publisher: 'SBクリエイティブ', price: '1,600円', trend: 'up' },
+    { rank: 4, prev: 2, title: '青天', author: '若林正恭', publisher: '文藝春秋', price: '1,800円', trend: 'down' },
+    { rank: 5, prev: 10, title: 'TOEIC L&R TEST 出る単特急 金のフレーズ 増補改訂版', author: 'TEX加藤', publisher: '朝日新聞出版', price: '900円', trend: 'up' },
+    { rank: 6, prev: 9, title: '2026 プロ野球オール写真選手名鑑', author: '', publisher: '日本スポーツ企画出版社', price: '1,091円', trend: 'up' },
+    { rank: 7, prev: 5, title: '気になってる人が男じゃなかった（4）', author: '新井すみこ', publisher: 'KADOKAWA', price: '1,300円', trend: 'down' },
+    { rank: 8, prev: null, title: '鴻池剛と猫のぽんた ニャアアアン！（4）', author: '鴻池剛', publisher: 'KADOKAWA', price: '1,350円', trend: 'new' },
+    { rank: 9, prev: 11, title: 'あそぼうサンリオキャラクターズ きらめきかわいいブック システムシール手帳特大号', author: '', publisher: '扶桑社', price: '1,300円', trend: 'up' },
+    { rank: 10, prev: null, title: 'ビバリウム Adoと私', author: 'Ado', publisher: 'KADOKAWA', price: '1,700円', trend: 'new' },
+    { rank: 11, prev: 8, title: 'カフェーの帰り道', author: '嶋津輝', publisher: '東京創元社', price: '1,700円', trend: 'down' },
+    { rank: 12, prev: 1, title: '大河の一滴　最終章', author: '五木寛之', publisher: '幻冬舎', price: '1,800円', trend: 'down' },
+    { rank: 13, prev: null, title: '異世界のんびり農家（20）', author: '内藤騎之介', publisher: 'KADOKAWA', price: '1,450円', trend: 'new' },
+    { rank: 14, prev: 19, title: 'ジャングル&Co.', author: '', publisher: 'デアゴスティーニ・ジャパン', price: '499円', trend: 'up' },
+    { rank: 15, prev: 18, title: 'イン・ザ・メガチャーチ', author: '朝井リョウ', publisher: '日経BP', price: '2,000円', trend: 'up' },
+    { rank: 16, prev: 14, title: 'プロ野球選手データ名鑑 2026', author: '', publisher: '宝島社', price: '391円', trend: 'down' },
+    { rank: 17, prev: 7, title: 'SANRIO CHARACTERS きらきらフルーツチャームBOOK', author: '', publisher: '宝島社', price: '798円', trend: 'down' },
+    { rank: 18, prev: 23, title: '変な地図', author: '雨穴', publisher: '双葉社', price: '1,600円', trend: 'up' },
+    { rank: 19, prev: 17, title: 'プロ野球12球団全選手完全名鑑 2026', author: '', publisher: 'コスミック出版', price: '400円', trend: 'down' },
+    { rank: 20, prev: 12, title: '2026 プロ野球写真＆データ選手名鑑', author: '', publisher: '日本スポーツ企画出版社', price: '536円', trend: 'down' },
+  ],
+  bunko: [
+    { rank: 1, prev: null, title: '文庫ランキングは準備中です', author: '', publisher: '', price: '', trend: 'new' },
+  ],
+  comic: [
+    { rank: 1, prev: null, title: 'コミックランキングは準備中です', author: '', publisher: '', price: '', trend: 'new' },
+  ]
+};
+
+// ISBNキャッシュ
+const isbnCache = {};
+
+// 現在のタブ
+let currentTab = 'all';
+
+// 位置情報
+let userLat = null;
+let userLng = null;
+
+// =====================
+// 初期化
+// =====================
+window.addEventListener('DOMContentLoaded', () => {
+  // 日付ラベル
+  document.getElementById('dateLabel').textContent = '2026年3月3日調べ';
+  renderBooks();
+});
+
+function switchTab(tab, el) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderBooks();
+}
+
+// =====================
+// 本一覧レンダリング
+// =====================
+function renderBooks() {
+  const list = document.getElementById('bookList');
+  const books = BESTSELLERS[currentTab];
+
+  list.innerHTML = books.map((book, i) => {
+    const delay = i * 40;
+    const rankClass = book.rank === 1 ? 'rank-1' : book.rank === 2 ? 'rank-2' : book.rank === 3 ? 'rank-3' : '';
+    const rankColor = book.rank === 1 ? 'gold' : book.rank === 2 ? 'silver' : book.rank === 3 ? 'bronze' : '';
+    const trendLabel = book.trend === 'up' ? `▲${book.prev ? book.rank + '位（先週' + book.prev + '位）' : ''}` 
+                     : book.trend === 'new' ? '✦ NEW' 
+                     : `▼ 先週${book.prev}位`;
+    const trendClass = book.trend === 'up' ? 'trend-up' : book.trend === 'new' ? 'trend-new' : 'trend-down';
+
+    const bookEmoji = getBookEmoji(book.title);
+
+    return `
+      <div class="book-card ${rankClass}" style="animation-delay:${delay}ms">
+        <div class="rank-badge ${rankColor}">${book.rank}</div>
+        <div class="book-cover">${bookEmoji}</div>
+        <div class="book-info">
+          <div class="book-title">${book.title}</div>
+          ${book.author ? `<div class="book-author">${book.author}</div>` : ''}
+          <div class="book-meta">
+            ${book.publisher ? `<span class="publisher-tag">${book.publisher}</span>` : ''}
+            ${book.price ? `<span class="price-tag">${book.price}</span>` : ''}
+            <span class="trend-badge ${trendClass}">${trendLabel}</span>
+          </div>
+          <button class="stock-btn" id="btn-${i}" onclick="checkStock(${i}, '${escapeTitle(book.title)}', '${escapeTitle(book.author)}')">
+            <span class="btn-icon">🏪</span> 近くの書店で在庫確認
+          </button>
+          <div class="isbn-status" id="isbn-status-${i}"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function getBookEmoji(title) {
+  if (title.includes('野球') || title.includes('選手')) return '⚾';
+  if (title.includes('猫') || title.includes('ねこ')) return '🐱';
+  if (title.includes('地図')) return '🗺️';
+  if (title.includes('TOEIC') || title.includes('英語')) return '📝';
+  if (title.includes('習慣')) return '💪';
+  if (title.includes('農家') || title.includes('異世界')) return '🌾';
+  if (title.includes('サンリオ') || title.includes('キャラ')) return '🎀';
+  return '📖';
+}
+
+function escapeTitle(str) {
+  return str.replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
+// =====================
+// 在庫確認（ISBN取得 → openbs.jpへ）
+// =====================
+async function checkStock(idx, title, author) {
+  const btn = document.getElementById(`btn-${idx}`);
+  const statusEl = document.getElementById(`isbn-status-${idx}`);
+
+  const cacheKey = title;
+  
+  // キャッシュにISBNがあればすぐ遷移
+  if (isbnCache[cacheKey]) {
+    openStockPage(isbnCache[cacheKey]);
+    return;
+  }
+
+  // ローディング状態
+  btn.className = 'stock-btn isbn-loading';
+  btn.innerHTML = '<span class="btn-icon">⏳</span> ISBN検索中...';
+  statusEl.textContent = '国立国会図書館APIで検索中...';
+
+  try {
+    const isbn = await fetchISBN(title, author);
+    
+    if (isbn) {
+      isbnCache[cacheKey] = isbn;
+      btn.className = 'stock-btn isbn-found';
+      btn.innerHTML = `<span class="btn-icon">✅</span> 近くの書店で在庫確認 → 開く`;
+      btn.onclick = () => openStockPage(isbn);
+      statusEl.textContent = `ISBN: ${isbn}`;
+      openStockPage(isbn);
+    } else {
+      // ISBNが見つからなかった場合はタイトル検索へ誘導
+      btn.className = 'stock-btn';
+      btn.innerHTML = '<span class="btn-icon">🔍</span> 書名で検索する';
+      btn.onclick = () => openSearchPage(title);
+      statusEl.textContent = 'ISBNが見つかりませんでした。書名で検索します。';
+    }
+  } catch (e) {
+    btn.className = 'stock-btn';
+    btn.innerHTML = '<span class="btn-icon">🏪</span> 近くの書店で在庫確認';
+    btn.onclick = () => checkStock(idx, title, author);
+    statusEl.textContent = '取得エラー。タップして再試行';
+  }
+}
+
+// 国立国会図書館 書誌情報API でISBNを取得
+async function fetchISBN(title, author) {
+  // NDL Search API (OpenSearch)
+  const query = encodeURIComponent(title + (author ? ' ' + author : ''));
+  const url = `https://ndlsearch.ndl.go.jp/api/opensearch?title=${encodeURIComponent(title)}&cnt=3&mediatype=1`;
+  
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('NDL fetch failed');
+    const text = await res.text();
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(text, 'text/xml');
+    
+    // ISBNを探す
+    const items = xml.querySelectorAll('item');
+    for (const item of items) {
+      // dc:identifier から ISBN を取得
+      const identifiers = item.querySelectorAll('identifier');
+      for (const id of identifiers) {
+        const val = id.textContent;
+        // ISBN-13 (978で始まる13桁)
+        const isbn13 = val.match(/978\d{10}/);
+        if (isbn13) return isbn13[0];
+        // ISBN-10
+        const isbn10 = val.match(/\d{9}[\dX]/);
+        if (isbn10) {
+          return convertToISBN13(isbn10[0]);
+        }
+      }
+      // subject に ISBN が入っている場合も
+      const subjects = item.querySelectorAll('subject');
+      for (const s of subjects) {
+        const isbn13 = s.textContent.match(/978\d{10}/);
+        if (isbn13) return isbn13[0];
+      }
+    }
+    
+    // 見つからなければ Google Books API も試みる
+    return await fetchISBNFromGoogle(title, author);
+  } catch (e) {
+    console.warn('NDL error:', e);
+    return await fetchISBNFromGoogle(title, author);
+  }
+}
+
+// Google Books API でISBNを取得
+async function fetchISBNFromGoogle(title, author) {
+  const q = encodeURIComponent(`intitle:${title}${author ? '+inauthor:' + author : ''}`);
+  const url = `https://www.googleapis.com/books/v1/volumes?q=${q}&langRestrict=ja&maxResults=3`;
+  
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Google Books fetch failed');
+    const data = await res.json();
+    
+    if (!data.items || data.items.length === 0) return null;
+    
+    for (const item of data.items) {
+      const ids = item.volumeInfo?.industryIdentifiers || [];
+      const isbn13 = ids.find(id => id.type === 'ISBN_13');
+      if (isbn13) return isbn13.identifier;
+      const isbn10 = ids.find(id => id.type === 'ISBN_10');
+      if (isbn10) return convertToISBN13(isbn10.identifier);
+    }
+    return null;
+  } catch (e) {
+    console.warn('Google Books error:', e);
+    return null;
+  }
+}
+
+function convertToISBN13(isbn10) {
+  if (!isbn10 || isbn10.length !== 10) return null;
+  const prefix = '978' + isbn10.slice(0, 9);
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(prefix[i]) * (i % 2 === 0 ? 1 : 3);
+  }
+  const check = (10 - (sum % 10)) % 10;
+  return prefix + check;
+}
+
+function openStockPage(isbn) {
+  window.open(`https://demo.openbs.jp/${isbn}`, '_blank');
+}
+
+function openSearchPage(title) {
+  // 直接openbs.jpのトップへ（タイトル検索は現状未対応のため）
+  const encoded = encodeURIComponent(title);
+  window.open(`https://www.google.com/search?q=${encoded}+ISBN`, '_blank');
+}
+
+// =====================
+// 位置情報取得
+// =====================
+function getLocation() {
+  const locationText = document.getElementById('locationText');
+  locationText.innerHTML = '⏳ 位置情報を取得中...';
+
+  if (!navigator.geolocation) {
+    locationText.innerHTML = '位置情報がサポートされていません';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      userLat = pos.coords.latitude.toFixed(4);
+      userLng = pos.coords.longitude.toFixed(4);
+      locationText.innerHTML = `<strong>現在地取得済み</strong>（${userLat}, ${userLng}） — 在庫確認ボタンで近隣書店を表示`;
+    },
+    (err) => {
+      locationText.innerHTML = '位置情報の取得に失敗しました';
+    }
+  );
+}
+</script>
+</body>
+</html>
