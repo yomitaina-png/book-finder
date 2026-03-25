@@ -52,10 +52,9 @@ def request_with_retry(method, url, retries=5, wait=10, **kwargs):
                 raise
 
 # =====================================================
-# STEP 0: Notionの列名と型を取得して表示
+# STEP 0: Notionの列名と型を取得
 # =====================================================
 def get_db_properties():
-    """データベースの列名と型を取得"""
     print('🔍 Notionデータベースの列名を確認中...')
     res = request_with_retry(
         'GET',
@@ -70,24 +69,21 @@ def get_db_properties():
     return props
 
 def build_prop_map(props):
-    """列名のキーワードマッチングで自動マッピング"""
     mapping = {
-        'title_col':     None,  # タイトル型（書名）
-        'rank_col':      None,  # 順位
-        'prev_col':      None,  # 前週順位
-        'author_col':    None,  # 著者
-        'price_col':     None,  # 価格・定価
-        'publisher_col': None,  # 出版社
-        'cover_col':     None,  # 書影URL
-        'detail_col':    None,  # 商品詳細URL
-        'isbn_col':      None,  # ISBN
-        'synopsis_col':  None,  # あらすじ・商品概要
+        'title_col':     None,
+        'rank_col':      None,
+        'prev_col':      None,
+        'author_col':    None,
+        'price_col':     None,
+        'publisher_col': None,
+        'cover_col':     None,
+        'detail_col':    None,
+        'isbn_col':      None,
+        'synopsis_col':  None,
     }
-
     for name, prop in props.items():
         t = prop['type']
         n = name.lower()
-
         if t == 'title':
             mapping['title_col'] = name
         elif '順位' in name and '前週' not in name and '先週' not in name:
@@ -225,18 +221,19 @@ def delete_page(page_id):
         print(f'    削除エラー: {e}')
 
 def make_text(value):
+    """rich_text型として送る"""
     return {'rich_text': [{'text': {'content': str(value)[:2000]}}]}
 
 def create_page(book, mapping, props):
     properties = {}
 
-    # タイトル列（必須）
+    # タイトル列
     if mapping['title_col']:
         properties[mapping['title_col']] = {
             'title': [{'text': {'content': book['title'][:2000]}}]
         }
 
-    # 順位：数値型 or テキスト型に応じて切り替え
+    # 順位：数値型 or テキスト型
     if mapping['rank_col']:
         col_type = props[mapping['rank_col']]['type']
         if col_type == 'number':
@@ -244,7 +241,7 @@ def create_page(book, mapping, props):
         else:
             properties[mapping['rank_col']] = make_text(book['rank'])
 
-    # テキスト系列
+    # テキスト系列（rich_text）
     text_fields = [
         ('prev_col',      book['prevRank']),
         ('author_col',    book['author']),
@@ -258,21 +255,25 @@ def create_page(book, mapping, props):
         if col and value:
             properties[col] = make_text(value)
 
-    # URL型列
-    if mapping['cover_col'] and book['coverUrl']:
-        properties[mapping['cover_col']] = {'url': book['coverUrl']}
-    if mapping['detail_col'] and book['detailUrl']:
-        properties[mapping['detail_col']] = {'url': book['detailUrl']}
+    # URL列：列の型に応じてURL型かrich_text型かを自動判定
+    for col_key, value in [('cover_col', book['coverUrl']), ('detail_col', book['detailUrl'])]:
+        col = mapping[col_key]
+        if col and value:
+            col_type = props[col]['type']
+            if col_type == 'url':
+                properties[col] = {'url': value}
+            else:
+                # rich_text型の場合はテキストとして送る
+                properties[col] = make_text(value)
 
     try:
-        res = request_with_retry('POST', f'{NOTION_API}/pages',
+        request_with_retry('POST', f'{NOTION_API}/pages',
             headers=HEADERS_NOTION,
             json={'parent': {'database_id': NOTION_DB_ID}, 'properties': properties})
         return True
     except requests.exceptions.HTTPError as e:
-        # 詳細なエラー内容を表示
         print(f'    ページ作成エラー: {e.response.status_code}')
-        print(f'    詳細: {e.response.text[:500]}')
+        print(f'    詳細: {e.response.text[:300]}')
         return False
 
 def update_notion(books, mapping, props):
@@ -303,10 +304,8 @@ def main():
     if not NOTION_TOKEN or not NOTION_DB_ID:
         raise ValueError('環境変数 NOTION_TOKEN と NOTION_DB_ID を設定してください')
 
-    # 列名を自動取得・マッピング
     props = get_db_properties()
     mapping = build_prop_map(props)
-
     books = fetch_nippan_ranking()
     books = enrich_with_isbn(books)
     update_notion(books, mapping, props)
