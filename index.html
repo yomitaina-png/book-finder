@@ -44,7 +44,6 @@
   .loading { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; gap: 16px; color: var(--text-light); }
   .spinner { width: 40px; height: 40px; border: 3px solid var(--brown-pale); border-top-color: var(--brown-mid); border-radius: 50%; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .loading p { font-size: 13px; }
 
   /* エラー */
   .error-box { background: #fff5f5; border: 1px solid #fbb; border-radius: 12px; padding: 24px 20px; text-align: center; }
@@ -71,11 +70,31 @@
   .rank-badge.silver { color:#a8a8a8; }
   .rank-badge.bronze { color:#cd7f32; }
 
-  .book-cover { width:62px; height:88px; border-radius:4px; box-shadow:2px 2px 8px rgba(0,0,0,.2); flex-shrink:0; overflow:hidden; background:var(--brown-pale); display:flex; align-items:center; justify-content:center; font-size:28px; }
+  /* 書影：クリック可能なリンク */
+  .book-cover {
+    width:62px; height:88px; border-radius:4px;
+    box-shadow:2px 2px 8px rgba(0,0,0,.2);
+    flex-shrink:0; overflow:hidden;
+    background:var(--brown-pale); display:flex; align-items:center; justify-content:center; font-size:28px;
+    text-decoration: none;
+    transition: transform .2s, box-shadow .2s;
+  }
+  .book-cover:hover { transform: scale(1.05); box-shadow: 3px 3px 12px rgba(0,0,0,.3); }
   .book-cover img { width:100%; height:100%; object-fit:cover; display:block; }
 
   .book-info { flex:1; min-width:0; }
-  .book-title { font-family:'Noto Serif JP',serif; font-size:13px; font-weight:600; line-height:1.45; color:var(--brown-dark); margin-bottom:4px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+
+  /* 書名：クリック可能なリンク */
+  .book-title {
+    font-family:'Noto Serif JP',serif; font-size:13px; font-weight:600;
+    line-height:1.45; color:var(--brown-dark); margin-bottom:4px;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+    text-decoration: none;
+    transition: color .2s;
+  }
+  .book-title:hover { color: var(--accent); }
+  .book-title.no-link { pointer-events: none; }
+
   .book-author { font-size:11px; color:var(--text-light); margin-bottom:5px; }
   .book-meta { display:flex; gap:5px; align-items:center; flex-wrap:wrap; margin-bottom:7px; }
   .publisher-tag { font-size:10px; background:var(--brown-pale); color:var(--brown-mid); padding:2px 7px; border-radius:10px; }
@@ -119,8 +138,8 @@
 
   <main>
     <div class="notice-bar">
-      📚 <strong>日販週間ベストセラー</strong> を表示。<br>
-      「近くの書店で在庫確認」ボタンで<strong>書店在庫プロジェクト</strong>に接続し、近隣書店の在庫状況を確認できます。
+      📚 <strong>日販週間ベストセラー</strong> を表示。書影・書名をタップで商品詳細へ。<br>
+      「近くの書店で在庫確認」ボタンで<strong>書店在庫プロジェクト</strong>に接続します。
     </div>
     <div class="section-header">
       <h2>📊 今週のランキング</h2>
@@ -138,95 +157,61 @@
 </div>
 
 <script>
-// =====================================================
-// 設定（変更が必要な場合はここだけ編集）
-// =====================================================
-const NOTION_TOKEN   = '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';
-const DATABASE_ID    = '32d63f88fff780cf9a0decdcddc799e7';
+const NOTION_TOKEN = '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';
+const DATABASE_ID  = '32d63f88fff780cf9a0decdcddc799e7';
 
-// Notionのプロパティ名とアプリ内キーのマッピング
-// Notionの列名を変えた場合はここを更新してください
-const PROP_MAP = {
-  title:     '書名',        // タイトル型
-  rank:      '順位',        // 数値型
-  prevRank:  '前週順位',    // テキスト型
-  author:    '著者名',      // テキスト型
-  price:     '価格',        // テキスト型
-  publisher: '出版社',      // テキスト型
-  coverUrl:  '書影URL',     // URL型
-  isbn:      'ISBNコード',  // テキスト型
-  synopsis:  'あらすじ',    // テキスト型
+// Notionのプロパティ名マッピング（実際の列名に合わせています）
+const PROP = {
+  title:     '書名',
+  rank:      '順位',
+  prevRank:  '前週順位',
+  author:    '著者、編者など',
+  price:     '定価（税込み）',
+  publisher: '出版社',
+  coverUrl:  '書影URL',
+  detailUrl: '商品詳細ページ',
+  isbn:      'ISBNコード',
+  synopsis:  '商品概要',
 };
 
-// =====================================================
-// Notion APIプロキシ（CORS回避のためClaudeのAPIを経由）
-// ※ GitHub Pagesで動かす場合はCORSプロキシが必要
-// ここではcors-anywhereまたはallOriginsを使用
-// =====================================================
+function getProp(props, key) {
+  const prop = props[key];
+  if (!prop) return '';
+  switch (prop.type) {
+    case 'title':     return prop.title.map(t => t.plain_text).join('');
+    case 'number':    return prop.number ?? '';
+    case 'rich_text': return prop.rich_text.map(t => t.plain_text).join('');
+    case 'url':       return prop.url ?? '';
+    case 'select':    return prop.select?.name ?? '';
+    default:          return '';
+  }
+}
+
 async function fetchNotion() {
   const url = `https://api.notion.com/v1/databases/${DATABASE_ID}/query`;
-  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+  const body = JSON.stringify({ sorts: [{ property: PROP.rank, direction: 'ascending' }] });
+  const headers = {
+    'Authorization': `Bearer ${NOTION_TOKEN}`,
+    'Content-Type': 'application/json',
+    'Notion-Version': '2022-06-28',
+  };
 
-  const body = JSON.stringify({
-    sorts: [{ property: PROP_MAP.rank, direction: 'ascending' }]
-  });
-
-  // まず直接試みる（ローカル環境など）
+  // 直接アクセスを試みる
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${NOTION_TOKEN}`,
-        'Content-Type': 'application/json',
-        'Notion-Version': '2022-06-28',
-      },
-      body
-    });
+    const res = await fetch(url, { method: 'POST', headers, body });
     if (res.ok) return await res.json();
-  } catch (e) {
-    // CORSエラーの場合はプロキシ経由で再試行
-  }
+  } catch (e) { /* CORSエラーの場合プロキシへ */ }
 
   // プロキシ経由
   const res = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${NOTION_TOKEN}`,
-      'Content-Type': 'application/json',
-      'Notion-Version': '2022-06-28',
-      'x-requested-with': 'XMLHttpRequest',
-    },
+    headers: { ...headers, 'x-requested-with': 'XMLHttpRequest' },
     body
   });
   if (!res.ok) throw new Error(`Notion API error: ${res.status}`);
   return await res.json();
 }
 
-// =====================================================
-// プロパティ値の取り出し
-// =====================================================
-function getProp(props, key) {
-  const prop = props[key];
-  if (!prop) return '';
-  switch (prop.type) {
-    case 'title':
-      return prop.title.map(t => t.plain_text).join('');
-    case 'number':
-      return prop.number ?? '';
-    case 'rich_text':
-      return prop.rich_text.map(t => t.plain_text).join('');
-    case 'url':
-      return prop.url ?? '';
-    case 'select':
-      return prop.select?.name ?? '';
-    default:
-      return '';
-  }
-}
-
-// =====================================================
-// メイン処理
-// =====================================================
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     const data = await fetchNotion();
@@ -234,15 +219,16 @@ window.addEventListener('DOMContentLoaded', async () => {
       .map(page => {
         const p = page.properties;
         return {
-          rank:      getProp(p, PROP_MAP.rank),
-          prevRank:  String(getProp(p, PROP_MAP.prevRank)),
-          title:     getProp(p, PROP_MAP.title),
-          author:    getProp(p, PROP_MAP.author),
-          price:     getProp(p, PROP_MAP.price),
-          publisher: getProp(p, PROP_MAP.publisher),
-          coverUrl:  getProp(p, PROP_MAP.coverUrl),
-          isbn:      getProp(p, PROP_MAP.isbn),
-          synopsis:  getProp(p, PROP_MAP.synopsis),
+          rank:      getProp(p, PROP.rank),
+          prevRank:  String(getProp(p, PROP.prevRank)),
+          title:     getProp(p, PROP.title),
+          author:    getProp(p, PROP.author),
+          price:     getProp(p, PROP.price),
+          publisher: getProp(p, PROP.publisher),
+          coverUrl:  getProp(p, PROP.coverUrl),
+          detailUrl: getProp(p, PROP.detailUrl),
+          isbn:      getProp(p, PROP.isbn),
+          synopsis:  getProp(p, PROP.synopsis),
         };
       })
       .filter(b => b.title)
@@ -256,26 +242,18 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('bookList').innerHTML = `
       <div class="error-box">
         <p>⚠️ データの読み込みに失敗しました</p>
-        <small>
-          考えられる原因：<br>
-          ・Notionのインテグレーション接続が切れている<br>
-          ・APIトークンが無効になっている<br>
-          ・データベースIDが間違っている<br><br>
-          エラー詳細: <code>${e.message}</code>
-        </small>
+        <small>エラー: <code>${e.message}</code></small>
       </div>`;
   }
 });
 
-// =====================================================
-// 描画
-// =====================================================
 function getTrend(b) {
   if (!b.prevRank || b.prevRank === '-') return 'new';
   const p = parseInt(b.prevRank);
   if (isNaN(p)) return 'new';
   return p > b.rank ? 'up' : p < b.rank ? 'down' : 'stay';
 }
+
 function getEmoji(t) {
   if (t.includes('野球')||t.includes('選手')) return '⚾';
   if (t.includes('猫')||t.includes('ねこ')) return '🐱';
@@ -284,12 +262,14 @@ function getEmoji(t) {
   if (t.includes('サンリオ')||t.includes('キャラ')) return '🎀';
   return '📖';
 }
+
 function toggleSyn(id) {
   const el = document.getElementById(id);
   const hint = el.nextElementSibling;
   el.classList.toggle('expanded');
   hint.textContent = el.classList.contains('expanded') ? '▲ 閉じる' : '▼ 続きを読む';
 }
+
 function getLocation() {
   const el = document.getElementById('locationText');
   el.innerHTML = '⏳ 位置情報を取得中...';
@@ -310,23 +290,37 @@ function renderBooks(books) {
     const tc = tr==='up' ? 'trend-up' : tr==='new' ? 'trend-new' : tr==='down' ? 'trend-down' : 'trend-stay';
     const rc = b.rank<=3 ? `rank-${b.rank}` : '';
     const rcolor = b.rank===1 ? 'gold' : b.rank===2 ? 'silver' : b.rank===3 ? 'bronze' : '';
-    const cover = b.coverUrl
-      ? `<img src="${b.coverUrl}" alt="" onerror="this.parentElement.innerHTML='${getEmoji(b.title)}'">`
+
+    // 書影：detailUrlがあればリンクにする
+    const coverInner = b.coverUrl
+      ? `<img src="${b.coverUrl}" alt="${b.title}" onerror="this.parentElement.innerHTML='${getEmoji(b.title)}'">`
       : getEmoji(b.title);
+    const cover = b.detailUrl
+      ? `<a class="book-cover" href="${b.detailUrl}" target="_blank" title="商品詳細を見る">${coverInner}</a>`
+      : `<div class="book-cover">${coverInner}</div>`;
+
+    // 書名：detailUrlがあればリンクにする
+    const titleEl = b.detailUrl
+      ? `<a class="book-title" href="${b.detailUrl}" target="_blank">${b.title}</a>`
+      : `<div class="book-title no-link">${b.title}</div>`;
+
+    // 在庫確認ボタン
     const btn = b.isbn
       ? `<a class="stock-btn" href="https://demo.openbs.jp/${b.isbn}" target="_blank">🏪 近くの書店で在庫確認</a>`
       : `<div class="stock-btn disabled">ISBN未登録</div>`;
+
     const sid = `s${i}`;
     const syn = b.synopsis
       ? `<div class="synopsis" id="${sid}" onclick="toggleSyn('${sid}')">${b.synopsis}</div>
          <div class="synopsis-hint" onclick="toggleSyn('${sid}')">▼ 続きを読む</div>`
       : '';
+
     return `
       <div class="book-card ${rc}" style="animation-delay:${i*45}ms">
         <div class="rank-badge ${rcolor}">${b.rank}</div>
-        <div class="book-cover">${cover}</div>
+        ${cover}
         <div class="book-info">
-          <div class="book-title">${b.title}</div>
+          ${titleEl}
           ${b.author ? `<div class="book-author">${b.author}</div>` : ''}
           <div class="book-meta">
             ${b.publisher ? `<span class="publisher-tag">${b.publisher}</span>` : ''}
