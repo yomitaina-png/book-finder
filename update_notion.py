@@ -32,7 +32,6 @@ HEADERS_WEB = {
 # ユーティリティ：リトライ付きリクエスト
 # =====================================================
 def request_with_retry(method, url, retries=5, wait=10, **kwargs):
-    """タイムアウト時に自動リトライするリクエスト"""
     for attempt in range(1, retries + 1):
         try:
             res = requests.request(method, url, timeout=60, **kwargs)
@@ -46,14 +45,12 @@ def request_with_retry(method, url, retries=5, wait=10, **kwargs):
             else:
                 raise
         except requests.exceptions.HTTPError as e:
-            # 429 レート制限の場合は長めに待つ
             if e.response.status_code == 429:
                 retry_after = int(e.response.headers.get('Retry-After', 30))
                 print(f'    ⏳ レート制限。{retry_after}秒待機...')
                 time.sleep(retry_after)
             else:
                 raise
-    return None
 
 # =====================================================
 # STEP 1: 日販ページからランキングを取得
@@ -78,15 +75,28 @@ def fetch_nippan_ranking():
         rank_text      = cols[0].get_text(strip=True)
         prev_rank_text = cols[1].get_text(strip=True)
 
+        # 書名と商品詳細URLをリンクから取得
         title_tag = cols[3].find('a')
-        title = title_tag.get_text(strip=True) if title_tag else cols[3].get_text(strip=True)
+        title     = title_tag.get_text(strip=True) if title_tag else cols[3].get_text(strip=True)
+        detail_url = title_tag['href'] if title_tag and title_tag.get('href') else ''
+        # 相対URLを絶対URLに変換
+        if detail_url and detail_url.startswith('/'):
+            detail_url = 'https://www.nippan.co.jp' + detail_url
 
         author    = cols[4].get_text(strip=True) if len(cols) > 4 else ''
         price     = cols[5].get_text(strip=True) if len(cols) > 5 else ''
         publisher = cols[6].get_text(strip=True) if len(cols) > 6 else ''
 
+        # 書影URL（画像タグから取得）
         img_tag   = cols[2].find('img') if len(cols) > 2 else None
         cover_url = img_tag['src'] if img_tag and img_tag.get('src') else ''
+        # 書影のリンク先URLも取得（画像を囲むaタグ）
+        img_link_tag = cols[2].find('a') if len(cols) > 2 else None
+        if img_link_tag and img_link_tag.get('href') and not detail_url:
+            detail_url = img_link_tag['href']
+            if detail_url.startswith('/'):
+                detail_url = 'https://www.nippan.co.jp' + detail_url
+
         if cover_url and cover_url.startswith('/'):
             cover_url = 'https://www.nippan.co.jp' + cover_url
 
@@ -104,11 +114,14 @@ def fetch_nippan_ranking():
             'price':     price,
             'publisher': publisher,
             'coverUrl':  cover_url,
+            'detailUrl': detail_url,
             'isbn':      '',
             'synopsis':  '',
         })
 
     print(f'  → {len(books)}冊取得')
+    for b in books[:3]:
+        print(f"     {b['rank']}位: {b['title'][:20]} / 詳細URL: {b['detailUrl'][:50]}")
     return books
 
 # =====================================================
@@ -188,10 +201,10 @@ def create_page(book):
         '前週順位': {
             'rich_text': [{'text': {'content': book['prevRank']}}]
         },
-        '著者名': {
+        '著者、編者など': {
             'rich_text': [{'text': {'content': book['author'][:2000]}}]
         },
-        '価格': {
+        '定価（税込み）': {
             'rich_text': [{'text': {'content': book['price']}}]
         },
         '出版社': {
@@ -200,12 +213,14 @@ def create_page(book):
         'ISBNコード': {
             'rich_text': [{'text': {'content': book['isbn']}}]
         },
-        'あらすじ': {
+        '商品概要': {
             'rich_text': [{'text': {'content': book['synopsis'][:2000]}}]
         },
     }
     if book['coverUrl']:
         properties['書影URL'] = {'url': book['coverUrl']}
+    if book['detailUrl']:
+        properties['商品詳細ページ'] = {'url': book['detailUrl']}
 
     try:
         request_with_retry(
@@ -236,7 +251,7 @@ def update_notion(books):
         if create_page(book):
             success += 1
             print(f"  ✅ {book['rank']}位: {book['title'][:30]}")
-        time.sleep(0.5)  # Notion APIのレート制限対策
+        time.sleep(0.5)
     print(f'  → {success}/{len(books)}件書き込み完了')
 
 # =====================================================
